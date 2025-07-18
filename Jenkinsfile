@@ -2,39 +2,34 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "sagar592/sample-website:latest"
+        DOCKER_IMAGE = "sagar592/sample-website:${env.BUILD_ID}"
         GIT_URL = "https://github.com/Harihshshyam/sample-website.git"
-        DOCKER_CREDENTIALS = credentials('dockerhub-cred')
     }
 
     stages {
         stage('Clone Code') {
             steps {
-                git branch: 'main',
-                    url: "${GIT_URL}"
+                git url: "${GIT_URL}",
+                    branch: 'main'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push') {
             steps {
                 sh "docker build -t ${DOCKER_IMAGE} ."
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
-                    sh 'echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin'
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    sh 'echo $PASS | docker login -u $USER --password-stdin'
                     sh "docker push ${DOCKER_IMAGE}"
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to K8s') {
             steps {
-                // Add your Kubernetes deployment steps here
-                // For example:
-                // sh "kubectl apply -f deployment.yaml"
+                withKubeConfig([credentialsId: 'my-kubeconfig']) {
+                    sh "kubectl set image deployment/sample-website-deployment sample-website=${DOCKER_IMAGE}"
+                    sh "kubectl rollout status deployment/sample-website-deployment"
+                }
             }
         }
     }
